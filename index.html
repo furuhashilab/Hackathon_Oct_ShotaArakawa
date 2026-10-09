@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>行田みんなの書き込みマップ</title>
+<meta name="description" content="行田のおすすめの場所や歩きたいルートを、地図に書き込んで教えてください。">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+<style>
+  :root {
+    --bg: #ffffff;
+    --surface: #f8f9fa;
+    --text: #212529;
+    --muted: #6c757d;
+    --line: #dee2e6;
+    --accent: #e8590c;
+    --accent-ink: #ffffff;
+    --active: #fff4e6;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", sans-serif;
+    display: grid; grid-template-columns: 360px 1fr; grid-template-rows: 100%;
+  }
+  #map { position: relative; min-height: 0; }
+  #panel {
+    overflow-y: auto; border-right: 1px solid var(--line);
+    padding: 16px; display: flex; flex-direction: column; gap: 16px;
+  }
+  h1 { font-size: 20px; margin: 0; }
+  .lead { margin: 4px 0 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
+  h2 { font-size: 15px; margin: 0 0 8px; display: flex; align-items: center; gap: 8px; }
+  .step { background: var(--accent); color: var(--accent-ink); border-radius: 999px; width: 22px; height: 22px; display: inline-grid; place-items: center; font-size: 13px; }
+
+  .tools { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .tool {
+    border: 2px solid var(--line); background: var(--bg); color: var(--text); border-radius: 10px;
+    padding: 8px 4px; font: inherit; font-size: 13px; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+  }
+  .tool .ic { font-size: 22px; line-height: 1; }
+  .tool[aria-pressed="true"] { border-color: var(--accent); background: var(--active); font-weight: 700; }
+  .hint {
+    margin-top: 8px; background: var(--surface); border-radius: 8px; padding: 10px 12px;
+    font-size: 14px; line-height: 1.6; min-height: 3.2em;
+  }
+  .row { display: flex; gap: 6px; margin-top: 8px; }
+  button.sub, button.main {
+    font: inherit; border-radius: 8px; padding: 8px 12px; cursor: pointer; border: 1px solid var(--line); background: var(--bg); color: var(--text);
+  }
+  button.main { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; padding: 10px 14px; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+
+  #items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  #items li {
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: grid;
+    grid-template-columns: 1fr auto; gap: 4px 8px; align-items: center; font-size: 14px;
+  }
+  #items li.sel { border-color: var(--accent); background: var(--active); }
+  #items .t { font-weight: 600; cursor: pointer; overflow-wrap: anywhere; }
+  #items .c { grid-column: 1 / -1; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+  #items .acts { display: flex; gap: 4px; }
+  #items .acts button { font: inherit; font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--text); cursor: pointer; }
+  .empty { color: var(--muted); font-size: 14px; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+
+  label.f { display: block; font-size: 13px; color: var(--muted); margin: 8px 0 4px; }
+  input[type=text], textarea {
+    width: 100%; font: inherit; font-size: 16px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg); color: var(--text);
+  }
+  textarea { min-height: 64px; resize: vertical; }
+  .stars { display: flex; gap: 4px; }
+  .stars button { font-size: 26px; background: none; border: none; cursor: pointer; padding: 0 2px; color: var(--line); }
+  .stars button.on { color: #f59f00; }
+  .stars-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); max-width: 190px; }
+  #sendMsg { font-size: 14px; line-height: 1.6; }
+  .ok { color: #2b8a3e; } .ng { color: #e03131; }
+  footer { font-size: 12px; color: var(--muted); line-height: 1.6; margin-top: auto; }
+  footer a { color: inherit; }
+
+  dialog { border: none; border-radius: 14px; padding: 20px; width: min(420px, calc(100vw - 32px)); background: var(--bg); color: var(--text); box-shadow: 0 10px 40px rgba(0,0,0,.25); }
+  dialog::backdrop { background: rgba(0,0,0,.35); }
+  dialog h3 { margin: 0 0 4px; font-size: 18px; }
+  .chips { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .chip { border: 2px solid var(--line); border-radius: 10px; padding: 8px; background: var(--bg); color: var(--text); font: inherit; cursor: pointer; text-align: left; }
+  .chip[aria-pressed="true"] { border-color: currentColor; font-weight: 700; }
+  .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+  .landmark {
+    background: rgba(255,255,255,.9); border: 1px solid #868e96; border-radius: 6px; padding: 2px 6px;
+    font-size: 12px; color: #212529; white-space: nowrap; pointer-events: none;
+  }
+  .landmark::before { content: "📌 "; }
+
+  @media (max-width: 760px) {
+    body { grid-template-columns: 100%; grid-template-rows: 55% 45%; }
+    #map { grid-row: 1; }
+    #panel { grid-row: 2; border-right: none; border-top: 1px solid var(--line); padding: 12px 16px; }
+    .lead { display: none; }
+  }
+</style>
+</head>
+<body>
+<aside id="panel">
+  <header>
+    <h1>行田みんなの書き込みマップ</h1>
+    <p class="lead">行田のおすすめの場所、歩きたいルート、気になるエリアを地図に描いて教えてください。地図アプリに詳しくなくても大丈夫です。</p>
+  </header>
+
+  <section>
+    <h2><span class="step">1</span>描くものを選ぶ</h2>
+    <div class="tools" role="toolbar" aria-label="描く道具">
+      <button class="tool" data-mode="point" aria-pressed="false"><span class="ic">📍</span>場所</button>
+      <button class="tool" data-mode="linestring" aria-pressed="false"><span class="ic">〰️</span>ルート</button>
+      <button class="tool" data-mode="polygon" aria-pressed="false"><span class="ic">⬠</span>エリア</button>
+      <button class="tool" data-mode="select" aria-pressed="false"><span class="ic">✋</span>直す</button>
+    </div>
+    <div class="hint" id="hint" aria-live="polite"></div>
+    <div class="row">
+      <button class="sub" id="finishBtn" hidden>✅ 描き終わる</button>
+      <button class="sub" id="deleteBtn" hidden>🗑 選んだものを消す</button>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="step">2</span>描いたもの <span id="count" style="color:var(--muted);font-weight:400"></span></h2>
+    <ul id="items"></ul>
+  </section>
+
+  <section>
+    <h2><span class="step">3</span>送る</h2>
+    <label class="f" for="name">お名前・ニックネーム（なくてもOK）</label>
+    <input type="text" id="name" maxlength="40" autocomplete="nickname">
+    <label class="f">使いやすさはどうでしたか？</label>
+    <div class="stars" id="stars" role="radiogroup" aria-label="使いやすさ">
+      <button data-v="1" aria-label="1">★</button><button data-v="2" aria-label="2">★</button><button data-v="3" aria-label="3">★</button><button data-v="4" aria-label="4">★</button><button data-v="5" aria-label="5">★</button>
+    </div>
+    <div class="stars-label"><span>むずかしい</span><span>かんたん</span></div>
+    <label class="f" for="feedback">困ったこと・感想（なくてもOK）</label>
+    <textarea id="feedback" maxlength="1000"></textarea>
+    <div class="row"><button class="main" id="sendBtn" disabled>この内容で送る</button></div>
+    <p id="sendMsg" aria-live="polite"></p>
+  </section>
+
+  <footer>
+    地図: <a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a> ／ 描画: <a href="https://github.com/JamesLMilner/terra-draw" target="_blank" rel="noopener">Terra Draw</a> + <a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL JS</a><br>
+    送られた内容は地図づくりの参考にします。個人を特定できる情報は書かないでください。
+  </footer>
+</aside>
+<div id="map"></div>
+
+<dialog id="dlg">
+  <form method="dialog" id="dlgForm">
+    <h3 id="dlgTitle">これはどんな場所？</h3>
+    <p class="lead" style="display:block;margin-bottom:12px">あてはまるものを選んで、ひとことどうぞ。</p>
+    <div class="chips" id="chips"></div>
+    <label class="f" for="fTitle">名前・タイトル</label>
+    <input type="text" id="fTitle" maxlength="60" placeholder="例：忍城の桜がきれい">
+    <label class="f" for="fComment">コメント（なくてもOK）</label>
+    <textarea id="fComment" maxlength="500" placeholder="例：春は人が多いので朝がおすすめ"></textarea>
+    <div class="dlg-actions">
+      <button class="sub" value="skip">あとで</button>
+      <button class="main" value="save" id="dlgSave">決定</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/terra-draw@1.34.0/dist/terra-draw.umd.js"></script>
+<script src="https://unpkg.com/terra-draw-maplibre-gl-adapter@1.4.1/dist/terra-draw-maplibre-gl-adapter.umd.js"></script>
+<script src="config.js"></script>
+<script>
+(() => {
+  const CFG = window.GYODA_CONFIG;
+  const DRAFT_KEY = 'gyoda-draw:draft:v1';
+  const KIND = { point: '場所', linestring: 'ルート', polygon: 'エリア' };
+  const KIND_ICON = { point: '📍', linestring: '〰️', polygon: '⬠' };
+  const HINTS = {
+    point: '地図をタップすると、そこに印が付きます。',
+    linestring: '道に沿って地図を順番にタップしてください。最後の点をもう一度タップするか「描き終わる」で完成します。',
+    polygon: '囲みたい範囲のまわりを順番にタップしてください。最初の点をタップするか「描き終わる」で完成します。',
+    select: '描いたものをタップして選ぶと、ドラッグで動かせます。線やエリアは角の丸をドラッグして形を直せます。',
+  };
+
+  const stats = { startedAt: null, drawCount: 0, deleteCount: 0, editCount: 0 };
+  const markStart = () => { if (!stats.startedAt) stats.startedAt = Date.now(); };
+
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const catOf = id => CFG.CATEGORIES.find(c => c.id === id);
+  const colorOf = f => (catOf(f.properties.category) || { color: CFG.DEFAULT_COLOR }).color;
+
+  // ---- 地図 ----
+  const map = new maplibregl.Map({
+    container: 'map',
+    style: {
+      version: 8,
+      sources: {
+        gsi: {
+          type: 'raster', tileSize: 256, maxzoom: 18,
+          tiles: ['https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png'],
+          attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">地理院タイル</a>',
+        },
+      },
+      layers: [{ id: 'gsi', type: 'raster', source: 'gsi' }],
+    },
+    center: CFG.CENTER, zoom: CFG.ZOOM, maxZoom: 19,
+    dragRotate: false, pitchWithRotate: false, touchPitch: false,
+  });
+  map.touchZoomRotate.disableRotation();
+  new ResizeObserver(() => map.resize()).observe(document.getElementById('map'));
+  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+  map.addControl(new maplibregl.GeolocateControl({ trackUserLocation: false }), 'top-right');
+
+  for (const lm of CFG.LANDMARKS) {
+    const el = document.createElement('div');
+    el.className = 'landmark';
+    el.textContent = lm.name;
+    new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat(lm.lngLat).addTo(map);
+  }
+
+  // ---- Terra Draw ----
+  const T = terraDraw;
+  const editable = { draggable: true, coordinates: { midpoints: true, draggable: true, deletable: true } };
+  const closing = { closingPointColor: '#ffffff', closingPointOutlineColor: '#212529', closingPointWidth: 7, closingPointOutlineWidth: 2 };
+  const draw = new T.TerraDraw({
+    adapter: new terraDrawMaplibreGlAdapter.TerraDrawMapLibreGLAdapter({ map }),
+    modes: [
+      new T.TerraDrawPointMode({ styles: { pointColor: colorOf, pointWidth: 9, pointOutlineColor: '#ffffff', pointOutlineWidth: 3 } }),
+      new T.TerraDrawLineStringMode({ styles: { lineStringColor: colorOf, lineStringWidth: 5, ...closing } }),
+      new T.TerraDrawPolygonMode({ styles: { fillColor: colorOf, fillOpacity: 0.25, outlineColor: colorOf, outlineWidth: 3, ...closing } }),
+      new T.TerraDrawSelectMode({
+        flags: { point: { feature: { draggable: true } }, linestring: { feature: editable }, polygon: { feature: editable } },
+        styles: {
+          selectedPointColor: '#fab005', selectedPointOutlineColor: '#ffffff', selectedPointWidth: 11, selectedPointOutlineWidth: 3,
+          selectedLineStringColor: '#fab005', selectedLineStringWidth: 6,
+          selectedPolygonColor: '#fab005', selectedPolygonFillOpacity: 0.3, selectedPolygonOutlineColor: '#f08c00', selectedPolygonOutlineWidth: 3,
+          selectionPointColor: '#ffffff', selectionPointOutlineColor: '#f08c00', selectionPointWidth: 7, selectionPointOutlineWidth: 2,
+          midPointColor: '#f08c00', midPointOutlineColor: '#ffffff', midPointWidth: 4, midPointOutlineWidth: 1,
+        },
+      }),
+    ],
+  });
+
+  let selectedId = null;
+  // 描画途中の線や、閉じ点・選択点などの補助図形は除く
+  const GEOM_OF = { point: 'Point', linestring: 'LineString', polygon: 'Polygon' };
+  const userFeatures = () => draw.getSnapshot().filter(f =>
+    GEOM_OF[f.properties.mode] === f.geometry.type && !f.properties.currentlyDrawing);
+
+  map.on('load', () => {
+    draw.start();
+    try {
+      const saved = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
+      if (saved?.features?.length) {
+        draw.addFeatures(saved.features);
+        if (saved.stats) Object.assign(stats, saved.stats);
+        document.getElementById('name').value = saved.name || '';
+      }
+    } catch (e) { /* 下書きがなくても動く */ }
+    setMode('point');
+    render();
+  });
+
+  // ---- 道具の切り替え ----
+  const toolBtns = [...document.querySelectorAll('.tool')];
+  const finishBtn = document.getElementById('finishBtn');
+  const deleteBtn = document.getElementById('deleteBtn');
+  function setMode(mode) {
+    draw.setMode(mode);
+    toolBtns.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
+    document.getElementById('hint').textContent = HINTS[mode];
+    finishBtn.hidden = !(mode === 'linestring' || mode === 'polygon');
+    deleteBtn.hidden = mode !== 'select';
+    deleteBtn.disabled = !selectedId;
+  }
+  toolBtns.forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+
+  // 「描き終わる」= Terra Draw の Enter キーでの確定
+  finishBtn.addEventListener('click', () => {
+    const canvas = map.getCanvas();
+    for (const type of ['keydown', 'keyup']) {
+      canvas.dispatchEvent(new KeyboardEvent(type, { key: 'Enter', code: 'Enter', bubbles: true }));
+    }
+  });
+
+  deleteBtn.addEventListener('click', () => { if (selectedId != null) removeFeature(selectedId); });
+
+  function removeFeature(id) {
+    if (!confirm('これを消しますか？')) return;
+    if (selectedId === id) { try { draw.deselectFeature(id); } catch (e) {} selectedId = null; }
+    draw.removeFeatures([id]);
+    stats.deleteCount++;
+    deleteBtn.disabled = true;
+    render();
+  }
+
+  // ---- イベント ----
+  draw.on('finish', (id, ctx) => {
+    markStart();
+    if (ctx.action === 'draw') {
+      stats.drawCount++;
+      openDialog(id, true);
+    } else {
+      stats.editCount++;
+    }
+    render();
+  });
+  draw.on('change', () => { saveDraft(); });
+  draw.on('select', id => { selectedId = id; deleteBtn.disabled = false; render(); });
+  draw.on('deselect', () => { selectedId = null; deleteBtn.disabled = true; render(); });
+
+  // ---- 詳細入力ダイアログ ----
+  const dlg = document.getElementById('dlg');
+  const chips = document.getElementById('chips');
+  let dlgTarget = null;
+  let dlgCategory = null;
+  chips.innerHTML = CFG.CATEGORIES.map(c =>
+    `<button type="button" class="chip" data-cat="${c.id}" aria-pressed="false" style="color:${c.color}"><span style="color:var(--text)">${c.emoji} ${esc(c.label)}</span></button>`).join('');
+  chips.addEventListener('click', e => {
+    const b = e.target.closest('.chip'); if (!b) return;
+    dlgCategory = b.dataset.cat;
+    chips.querySelectorAll('.chip').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  });
+  // タイトル欄での Enter は「あとで」ではなく「決定」にする
+  document.getElementById('fTitle').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); document.getElementById('dlgSave').click(); }
+  });
+  function openDialog(id, isNew) {
+    const f = draw.getSnapshotFeature(id); if (!f) return;
+    dlgTarget = id;
+    dlgCategory = f.properties.category || null;
+    chips.querySelectorAll('.chip').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.cat === dlgCategory)));
+    document.getElementById('dlgTitle').textContent =
+      `${KIND_ICON[f.properties.mode]} この${KIND[f.properties.mode]}について${isNew ? '教えてください' : '直す'}`;
+    document.getElementById('fTitle').value = f.properties.title || '';
+    document.getElementById('fComment').value = f.properties.comment || '';
+    dlg.showModal();
+    setTimeout(() => document.getElementById('fTitle').focus(), 50);
+  }
+  document.getElementById('dlgForm').addEventListener('submit', e => {
+    if (e.submitter?.value === 'save' && dlgTarget != null && draw.getSnapshotFeature(dlgTarget)) {
+      try {
+        draw.updateFeatureProperties(dlgTarget, {
+          category: dlgCategory || undefined,
+          title: document.getElementById('fTitle').value.trim() || undefined,
+          comment: document.getElementById('fComment').value.trim() || undefined,
+        });
+      } catch (e) { console.error('updateFeatureProperties failed', e); }
+    }
+    dlgTarget = null;
+    render();
+  });
+
+  // ---- 一覧 ----
+  const list = document.getElementById('items');
+  function render() {
+    const feats = userFeatures();
+    document.getElementById('count').textContent = feats.length ? `（${feats.length}）` : '';
+    document.getElementById('sendBtn').disabled = feats.length === 0;
+    if (!feats.length) { list.innerHTML = '<li class="empty" style="border:none;padding:0">まだありません。上の道具で地図に描いてみましょう。</li>'; return; }
+    list.innerHTML = feats.map(f => {
+      const p = f.properties, c = catOf(p.category);
+      return `<li data-id="${esc(f.id)}" class="${f.id === selectedId ? 'sel' : ''}">
+        <span class="t" data-act="zoom"><span class="dot" style="background:${c ? c.color : CFG.DEFAULT_COLOR}"></span>${KIND_ICON[p.mode]} ${esc(p.title || `（名前なしの${KIND[p.mode]}）`)}</span>
+        <span class="acts"><button data-act="edit">書き直す</button><button data-act="del">消す</button></span>
+        ${p.comment || c ? `<span class="c">${c ? esc(c.emoji + ' ' + c.label) : ''}${p.comment && c ? '・' : ''}${esc(p.comment || '')}</span>` : ''}
+      </li>`;
+    }).join('');
+    saveDraft();
+  }
+  list.addEventListener('click', e => {
+    const li = e.target.closest('li[data-id]'); if (!li) return;
+    const id = li.dataset.id;
+    const act = e.target.closest('[data-act]')?.dataset.act;
+    if (act === 'edit') openDialog(id, false);
+    else if (act === 'del') removeFeature(id);
+    else if (act === 'zoom') zoomTo(id);
+  });
+  function zoomTo(id) {
+    const f = draw.getSnapshotFeature(id); if (!f) return;
+    const coords = f.geometry.type === 'Point' ? [f.geometry.coordinates]
+      : f.geometry.type === 'LineString' ? f.geometry.coordinates : f.geometry.coordinates[0];
+    const b = coords.reduce((bb, c) => bb.extend(c), new maplibregl.LngLatBounds(coords[0], coords[0]));
+    map.fitBounds(b, { padding: 80, maxZoom: 17 });
+  }
+
+  // ---- 下書き保存（この端末のみ） ----
+  function saveDraft() {
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({
+        features: userFeatures(), stats, name: document.getElementById('name').value,
+      }));
+    } catch (e) { /* 保存できなくても動く */ }
+  }
+  document.getElementById('name').addEventListener('input', saveDraft);
+
+  // ---- 使いやすさ ----
+  let rating = null;
+  const stars = document.getElementById('stars');
+  stars.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    rating = Number(b.dataset.v);
+    stars.querySelectorAll('button').forEach(x => x.classList.toggle('on', Number(x.dataset.v) <= rating));
+  });
+
+  // ---- 送信 ----
+  function buildSubmission() {
+    const id = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now()) + Math.random().toString(16).slice(2);
+    return {
+      type: 'FeatureCollection',
+      metadata: {
+        app: 'gyoda-draw', version: 1, submissionId: id, submittedAt: new Date().toISOString(),
+        name: document.getElementById('name').value.trim() || null,
+        rating, feedback: document.getElementById('feedback').value.trim() || null,
+        secondsSpent: stats.startedAt ? Math.round((Date.now() - stats.startedAt) / 1000) : null,
+        drawCount: stats.drawCount, editCount: stats.editCount, deleteCount: stats.deleteCount,
+        touch: matchMedia('(pointer: coarse)').matches,
+      },
+      features: userFeatures().map(f => ({
+        type: 'Feature',
+        geometry: f.geometry,
+        properties: {
+          kind: f.properties.mode,
+          category: f.properties.category || null,
+          title: f.properties.title || null,
+          comment: f.properties.comment || null,
+        },
+      })),
+    };
+  }
+  const sendBtn = document.getElementById('sendBtn');
+  const sendMsg = document.getElementById('sendMsg');
+  sendBtn.addEventListener('click', async () => {
+    const sub = buildSubmission();
+    if (!sub.features.length) return;
+    sendBtn.disabled = true;
+    if (CFG.SUBMIT_URL) {
+      sendMsg.className = ''; sendMsg.textContent = '送っています…';
+      try {
+        // text/plain にして CORS のプリフライトを避ける（Apps Script 向け）
+        const res = await fetch(CFG.SUBMIT_URL, { method: 'POST', body: JSON.stringify(sub) });
+        const out = await res.json();
+        if (!out.ok) throw new Error(out.error || 'error');
+        sendMsg.className = 'ok';
+        sendMsg.textContent = `送りました！ありがとうございます（${sub.features.length}件）。`;
+        clearAll();
+      } catch (e) {
+        sendMsg.className = 'ng';
+        sendMsg.textContent = 'うまく送れませんでした。電波の良いところでもう一度お試しください。';
+        sendBtn.disabled = false;
+      }
+    } else {
+      const blob = new Blob([JSON.stringify(sub, null, 2)], { type: 'application/geo+json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      const t = new Date(), p2 = n => String(n).padStart(2, '0');
+      a.download = `gyoda-map-${t.getFullYear()}${p2(t.getMonth() + 1)}${p2(t.getDate())}-${p2(t.getHours())}${p2(t.getMinutes())}.geojson`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      sendMsg.className = 'ok';
+      sendMsg.textContent = 'ファイルを保存しました。このファイルを地図の管理者に送ってください。';
+      sendBtn.disabled = false;
+    }
+  });
+  function clearAll() {
+    draw.clear();
+    selectedId = null;
+    Object.assign(stats, { startedAt: null, drawCount: 0, deleteCount: 0, editCount: 0 });
+    try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
+    render();
+  }
+})();
+</script>
+</body>
+</html>

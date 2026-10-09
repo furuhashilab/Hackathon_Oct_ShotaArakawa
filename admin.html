@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>書き込みビューア</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+<style>
+  :root { --bg: #ffffff; --surface: #f8f9fa; --text: #212529; --muted: #6c757d; --line: #dee2e6; --accent: #e8590c; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", sans-serif;
+    display: grid; grid-template-columns: 380px 1fr; grid-template-rows: 100%;
+  }
+  #panel { overflow-y: auto; border-right: 1px solid var(--line); padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+  #map { min-height: 0; }
+  h1 { font-size: 18px; margin: 0; }
+  h2 { font-size: 14px; margin: 0 0 8px; }
+  .muted { color: var(--muted); font-size: 13px; line-height: 1.6; }
+  input[type=text], input[type=password] { width: 100%; font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); }
+  button, .filebtn { font: inherit; font-size: 14px; border-radius: 6px; padding: 6px 10px; cursor: pointer; border: 1px solid var(--line); background: var(--bg); color: var(--text); display: inline-block; }
+  button.main { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+  .row { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; align-items: center; }
+  #drop { border: 2px dashed var(--line); border-radius: 8px; padding: 12px; text-align: center; font-size: 13px; color: var(--muted); }
+  #drop.over { border-color: var(--accent); color: var(--accent); }
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .tile { background: var(--surface); border-radius: 8px; padding: 8px 10px; }
+  .tile b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+  .tile span { font-size: 12px; color: var(--muted); }
+  .filters label { display: inline-flex; align-items: center; gap: 4px; margin: 0 10px 6px 0; font-size: 14px; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+  #subs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  #subs li { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 13px; line-height: 1.6; }
+  #subs li b { font-size: 14px; }
+  #status { font-size: 13px; }
+  .ng { color: #e03131; }
+  .maplibregl-popup-content { font-family: inherit; font-size: 13px; line-height: 1.6; max-width: 260px; }
+  .maplibregl-popup-content h3 { margin: 0 0 4px; font-size: 15px; }
+  @media (max-width: 760px) {
+    body { grid-template-columns: 100%; grid-template-rows: 50% 50%; }
+    #map { grid-row: 1; }
+    #panel { grid-row: 2; border-right: none; border-top: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+<aside id="panel">
+  <header>
+    <h1>書き込みビューア</h1>
+    <p class="muted">集まった書き込みを地図で確認します（管理者用）。</p>
+  </header>
+
+  <section>
+    <h2>読み込む</h2>
+    <label class="muted" for="key">Apps Script の合言葉（ADMIN_KEY）</label>
+    <input type="password" id="key" autocomplete="off">
+    <div class="row"><button class="main" id="fetchBtn">投稿を読み込む</button></div>
+    <div class="row" style="margin-top:10px">
+      <div id="drop" style="flex:1">GeoJSON ファイルをここにドロップ<br>または <label class="filebtn">選ぶ<input type="file" id="file" accept=".geojson,.json" multiple hidden></label></div>
+    </div>
+    <p id="status" aria-live="polite"></p>
+  </section>
+
+  <section>
+    <h2>まとめ</h2>
+    <div class="tiles">
+      <div class="tile"><b id="sSubs">0</b><span>投稿</span></div>
+      <div class="tile"><b id="sFeats">0</b><span>書き込み（場所 / ルート / エリア）</span></div>
+      <div class="tile"><b id="sRating">–</b><span>使いやすさの平均（5点満点）</span></div>
+      <div class="tile"><b id="sTime">–</b><span>かかった時間の中央値</span></div>
+    </div>
+    <p class="muted" id="sKinds"></p>
+  </section>
+
+  <section>
+    <h2>種類で絞り込む</h2>
+    <div class="filters" id="filters"></div>
+    <div class="row"><button id="exportBtn">表示中の書き込みを GeoJSON で保存</button></div>
+  </section>
+
+  <section>
+    <h2>投稿ごとの感想</h2>
+    <ul id="subs"></ul>
+  </section>
+</aside>
+<div id="map"></div>
+
+<script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<script src="config.js"></script>
+<script>
+(() => {
+  const CFG = window.GYODA_CONFIG;
+  const KIND = { point: '場所', linestring: 'ルート', polygon: 'エリア' };
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const catOf = id => CFG.CATEGORIES.find(c => c.id === id);
+  const status = (msg, ng) => { const el = document.getElementById('status'); el.textContent = msg; el.className = ng ? 'ng' : ''; };
+
+  // submissionId ごとに 1 件（同じものを二重に読んでも重複しない）
+  const submissions = new Map();
+  const hidden = new Set();
+
+  const map = new maplibregl.Map({
+    container: 'map',
+    style: {
+      version: 8,
+      sources: {
+        gsi: {
+          type: 'raster', tileSize: 256, maxzoom: 18,
+          tiles: ['https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png'],
+          attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">地理院タイル</a>',
+        },
+      },
+      layers: [{ id: 'gsi', type: 'raster', source: 'gsi' }],
+    },
+    center: CFG.CENTER, zoom: CFG.ZOOM,
+  });
+  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+  new ResizeObserver(() => map.resize()).observe(document.getElementById('map'));
+
+  const colorExpr = ['match', ['get', 'category'], ...CFG.CATEGORIES.flatMap(c => [c.id, c.color]), CFG.DEFAULT_COLOR];
+  map.on('load', () => {
+    map.addSource('subs', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addLayer({ id: 'fill', type: 'fill', source: 'subs', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': colorExpr, 'fill-opacity': 0.2 } });
+    map.addLayer({ id: 'outline', type: 'line', source: 'subs', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'line-color': colorExpr, 'line-width': 2 } });
+    map.addLayer({ id: 'line', type: 'line', source: 'subs', filter: ['==', ['geometry-type'], 'LineString'], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': colorExpr, 'line-width': 4, 'line-opacity': 0.85 } });
+    map.addLayer({ id: 'point', type: 'circle', source: 'subs', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-color': colorExpr, 'circle-radius': 7, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 } });
+
+    for (const id of ['fill', 'line', 'point']) {
+      map.on('click', id, e => {
+        const p = e.features[0].properties, c = catOf(p.category);
+        new maplibregl.Popup().setLngLat(e.lngLat).setHTML(`
+          <h3>${esc(p.title || `（名前なしの${KIND[p.kind] || ''}）`)}</h3>
+          ${c ? `<div><span class="dot" style="background:${c.color}"></span> ${esc(c.emoji + ' ' + c.label)}</div>` : ''}
+          ${p.comment ? `<div>${esc(p.comment)}</div>` : ''}
+          <div class="muted">${esc(p.submitter || '名前なし')}・${esc(p.submittedAt ? new Date(p.submittedAt).toLocaleString('ja-JP') : '')}</div>`).addTo(map);
+      });
+      map.on('mouseenter', id, () => { map.getCanvas().style.cursor = 'pointer'; });
+      map.on('mouseleave', id, () => { map.getCanvas().style.cursor = ''; });
+    }
+    refresh();
+  });
+
+  function addSubmission(fc) {
+    if (!fc || fc.type !== 'FeatureCollection' || !Array.isArray(fc.features)) return false;
+    const m = fc.metadata || {};
+    const id = m.submissionId || `file-${submissions.size}-${Date.now()}`;
+    submissions.set(id, fc);
+    return true;
+  }
+
+  function visibleFeatures() {
+    const out = [];
+    for (const fc of submissions.values()) {
+      const m = fc.metadata || {};
+      for (const f of fc.features) {
+        const cat = f.properties?.category || 'none';
+        if (hidden.has(cat)) continue;
+        out.push({ type: 'Feature', geometry: f.geometry, properties: { ...f.properties, submitter: m.name || null, submittedAt: m.submittedAt || null, submissionId: m.submissionId || null } });
+      }
+    }
+    return out;
+  }
+
+  function refresh() {
+    const subs = [...submissions.values()];
+    const feats = subs.flatMap(s => s.features);
+    document.getElementById('sSubs').textContent = subs.length;
+    document.getElementById('sFeats').textContent = feats.length;
+    const ratings = subs.map(s => s.metadata?.rating).filter(Number.isFinite);
+    document.getElementById('sRating').textContent = ratings.length ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1) : '–';
+    const times = subs.map(s => s.metadata?.secondsSpent).filter(Number.isFinite).sort((a, b) => a - b);
+    const mid = Math.floor(times.length / 2);
+    const med = !times.length ? null : Math.round(times.length % 2 ? times[mid] : (times[mid - 1] + times[mid]) / 2);
+    document.getElementById('sTime').textContent = med == null ? '–' : med >= 60 ? `${Math.floor(med / 60)}分${med % 60}秒` : `${med}秒`;
+    const byKind = k => feats.filter(f => f.properties?.kind === k).length;
+    document.getElementById('sKinds').textContent = feats.length ? `場所 ${byKind('point')}・ルート ${byKind('linestring')}・エリア ${byKind('polygon')}` : '';
+
+    const cats = [...CFG.CATEGORIES, { id: 'none', label: '未分類', emoji: '', color: CFG.DEFAULT_COLOR }];
+    document.getElementById('filters').innerHTML = cats.map(c => {
+      const n = feats.filter(f => (f.properties?.category || 'none') === c.id).length;
+      return `<label><input type="checkbox" data-cat="${c.id}" ${hidden.has(c.id) ? '' : 'checked'}><span class="dot" style="background:${c.color}"></span>${esc(c.label)} (${n})</label>`;
+    }).join('');
+
+    document.getElementById('subs').innerHTML = subs.length ? subs
+      .slice().sort((a, b) => String(b.metadata?.submittedAt).localeCompare(String(a.metadata?.submittedAt)))
+      .map(s => {
+        const m = s.metadata || {};
+        return `<li><b>${esc(m.name || '名前なし')}</b>・${s.features.length}件${m.rating ? `・★${m.rating}` : ''}${Number.isFinite(m.secondsSpent) ? `・${Math.round(m.secondsSpent / 60)}分` : ''}
+          <div class="muted">${esc(m.submittedAt ? new Date(m.submittedAt).toLocaleString('ja-JP') : '')}${m.touch ? '・スマホ等' : ''}・描いた${m.drawCount ?? '?'} / 直した${m.editCount ?? '?'} / 消した${m.deleteCount ?? '?'}</div>
+          ${m.feedback ? `<div>${esc(m.feedback)}</div>` : ''}</li>`;
+      }).join('') : '<li class="muted" style="border:none;padding:0">まだ読み込んでいません。</li>';
+
+    const src = map.getSource('subs');
+    if (src) src.setData({ type: 'FeatureCollection', features: visibleFeatures() });
+  }
+
+  document.getElementById('filters').addEventListener('change', e => {
+    const cat = e.target.dataset.cat; if (!cat) return;
+    e.target.checked ? hidden.delete(cat) : hidden.add(cat);
+    refresh();
+  });
+
+  // ---- Apps Script から読み込む ----
+  document.getElementById('fetchBtn').addEventListener('click', async () => {
+    if (!CFG.SUBMIT_URL) { status('config.js の SUBMIT_URL が未設定です。ファイルを読み込んでください。', true); return; }
+    const key = document.getElementById('key').value;
+    if (!key) { status('合言葉を入れてください。', true); return; }
+    status('読み込んでいます…');
+    try {
+      const res = await fetch(`${CFG.SUBMIT_URL}?key=${encodeURIComponent(key)}`);
+      const out = await res.json();
+      if (!out.ok) throw new Error(out.error === 'unauthorized' ? '合言葉が違います' : out.error);
+      out.submissions.forEach(addSubmission);
+      status(`${out.submissions.length} 件の投稿を読み込みました。`);
+      refresh();
+    } catch (e) { status(`読み込めませんでした（${e.message}）`, true); }
+  });
+
+  // ---- ファイルから読み込む ----
+  async function loadFiles(files) {
+    let ok = 0, ng = 0;
+    for (const file of files) {
+      try { addSubmission(JSON.parse(await file.text())) ? ok++ : ng++; } catch (e) { ng++; }
+    }
+    status(`${ok} 件のファイルを読み込みました${ng ? `（${ng} 件は読めませんでした）` : ''}。`, ng > 0 && ok === 0);
+    refresh();
+  }
+  document.getElementById('file').addEventListener('change', e => loadFiles(e.target.files));
+  const drop = document.getElementById('drop');
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); loadFiles(e.dataTransfer.files); });
+
+  // ---- 書き出し ----
+  document.getElementById('exportBtn').addEventListener('click', () => {
+    const fc = { type: 'FeatureCollection', features: visibleFeatures() };
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(fc, null, 2)], { type: 'application/geo+json' }));
+    a.download = 'gyoda-map-all.geojson';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+})();
+</script>
+</body>
+</html>
