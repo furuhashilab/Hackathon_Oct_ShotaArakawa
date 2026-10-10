@@ -146,7 +146,7 @@
   </section>
 
   <footer>
-    地図: <a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a> ／ 描画: <a href="https://github.com/JamesLMilner/terra-draw" target="_blank" rel="noopener">Terra Draw</a> + <a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL JS</a><br>
+    地図: &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors ／ 描画: <a href="https://github.com/JamesLMilner/terra-draw" target="_blank" rel="noopener">Terra Draw</a> + <a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL JS</a><br>
     送られた内容は地図づくりの参考にします。個人を特定できる情報は書かないでください。
   </footer>
 </aside>
@@ -198,13 +198,13 @@
     style: {
       version: 8,
       sources: {
-        gsi: {
-          type: 'raster', tileSize: 256, maxzoom: 18,
-          tiles: ['https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png'],
-          attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">地理院タイル</a>',
+        osm: {
+          type: 'raster', tileSize: 256, maxzoom: 19,
+          tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors',
         },
       },
-      layers: [{ id: 'gsi', type: 'raster', source: 'gsi' }],
+      layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
     },
     center: CFG.CENTER, zoom: CFG.ZOOM, maxZoom: 19,
     dragRotate: false, pitchWithRotate: false, touchPitch: false,

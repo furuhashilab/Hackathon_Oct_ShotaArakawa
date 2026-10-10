@@ -4,7 +4,7 @@ GIS に触れたことのない一般の人でも、地図に「場所・ルー�
 古橋研究室 10 月ハッカソン（FOSS4G Hiroshima 2026 / SotM Asia 2026 Osaka 振り返り）の成果物です。
 
 - 試した技術: [Terra Draw](https://github.com/JamesLMilner/terra-draw)（FOSS4G 2026 で紹介）＋ [MapLibre GL JS](https://maplibre.org/)
-- 背景地図: [地理院タイル（淡色地図）](https://maps.gsi.go.jp/development/ichiran.html)
+- 背景地図: [OpenStreetMap](https://www.openstreetmap.org/copyright)（© OpenStreetMap contributors）
 
 ## ページ
 
