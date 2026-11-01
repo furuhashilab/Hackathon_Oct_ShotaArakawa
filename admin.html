@@ -35,6 +35,12 @@
   #subs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
   #subs li { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 13px; line-height: 1.6; }
   #subs li b { font-size: 14px; }
+  #subs li { overflow-wrap: anywhere; }
+  .feature-list { margin-top: 8px; border-top: 1px solid var(--line); }
+  .feature-row { padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .feature-row:last-child { border-bottom: none; }
+  .feature-row button { margin-top: 4px; min-height: 36px; }
+  button:disabled { opacity: .5; cursor: default; }
   #status { font-size: 13px; }
   .ng { color: #e03131; }
   .maplibregl-popup-content { font-family: inherit; font-size: 13px; line-height: 1.6; max-width: 260px; }
@@ -82,7 +88,7 @@
   </section>
 
   <section>
-    <h2>投稿ごとの感想</h2>
+    <h2>投稿一覧・個別保存</h2>
     <ul id="subs"></ul>
   </section>
 </aside>
@@ -188,9 +194,20 @@
       .slice().sort((a, b) => String(b.metadata?.submittedAt).localeCompare(String(a.metadata?.submittedAt)))
       .map(s => {
         const m = s.metadata || {};
+        const submissionIndex = subs.indexOf(s);
         return `<li><b>${esc(m.name || '名前なし')}</b>・${s.features.length}件${m.rating ? `・★${m.rating}` : ''}${Number.isFinite(m.secondsSpent) ? `・${Math.round(m.secondsSpent / 60)}分` : ''}
           <div class="muted">${esc(m.submittedAt ? new Date(m.submittedAt).toLocaleString('ja-JP') : '')}${m.touch ? '・スマホ等' : ''}・描いた${m.drawCount ?? '?'} / 直した${m.editCount ?? '?'} / 消した${m.deleteCount ?? '?'}</div>
-          ${m.feedback ? `<div>${esc(m.feedback)}</div>` : ''}</li>`;
+          ${m.feedback ? `<div>${esc(m.feedback)}</div>` : ''}
+          <div class="row"><button data-submission="${submissionIndex}">この投稿全体を保存（${s.features.length}件）</button></div>
+          <div class="feature-list">${s.features.map((feature, featureIndex) => {
+            const p = feature.properties || {};
+            const title = p.title || `名前なしの${KIND[p.kind] || '書き込み'}`;
+            const category = catOf(p.category);
+            return `<div class="feature-row"><b>${esc(title)}</b>
+              <div class="muted">${esc(KIND[p.kind] || feature.geometry?.type || '')}${category ? `・${esc(category.label)}` : ''}${hidden.has(p.category || 'none') ? '・地図では非表示' : ''}</div>
+              ${p.comment ? `<div>${esc(p.comment)}</div>` : ''}
+              <button data-submission="${submissionIndex}" data-feature="${featureIndex}" aria-label="${esc(title)}を1件保存">この1件を保存</button></div>`;
+          }).join('')}</div></li>`;
       }).join('') : '<li class="muted" style="border:none;padding:0">まだ読み込んでいません。</li>';
 
     const src = map.getSource('subs');
@@ -235,13 +252,43 @@
   drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); loadFiles(e.dataTransfer.files); });
 
   // ---- 書き出し ----
+  function downloadGeoJSON(fc, filename) {
+    const a = document.createElement('a');
+    const url = URL.createObjectURL(new Blob([JSON.stringify(fc, null, 2)], { type: 'application/geo+json' }));
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  document.getElementById('subs').addEventListener('click', e => {
+    const button = e.target.closest('button[data-submission]');
+    if (!button) return;
+    const index = Number(button.dataset.submission);
+    const submission = [...submissions.values()][index];
+    if (!submission) return;
+    // Keep the original GeoJSON and metadata so individual files can be re-imported.
+    if (button.dataset.feature === undefined) {
+      downloadGeoJSON(submission, `gyoda-submission-${index + 1}.geojson`);
+      return;
+    }
+    const featureIndex = Number(button.dataset.feature);
+    const feature = submission.features[featureIndex];
+    if (!feature) return;
+    const originalId = submission.metadata?.submissionId || `submission-${index + 1}`;
+    const fc = { ...submission, features: [feature], metadata: {
+      ...submission.metadata,
+      originalSubmissionId: originalId,
+      submissionId: `${originalId}-feature-${featureIndex + 1}`,
+    } };
+    downloadGeoJSON(fc, `gyoda-submission-${index + 1}-feature-${featureIndex + 1}.geojson`);
+  });
+
   document.getElementById('exportBtn').addEventListener('click', () => {
     const fc = { type: 'FeatureCollection', features: visibleFeatures() };
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([JSON.stringify(fc, null, 2)], { type: 'application/geo+json' }));
-    a.download = 'gyoda-map-all.geojson';
-    a.click();
-    URL.revokeObjectURL(a.href);
+    downloadGeoJSON(fc, 'gyoda-map-all.geojson');
   });
 })();
 </script>

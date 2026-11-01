@@ -132,8 +132,6 @@
 
   <section>
     <h2><span class="step">3</span>送る</h2>
-    <label class="f" for="name">お名前・ニックネーム（なくてもOK）</label>
-    <input type="text" id="name" maxlength="40" autocomplete="nickname">
     <label class="f">使いやすさはどうでしたか？</label>
     <div class="stars" id="stars" role="radiogroup" aria-label="使いやすさ">
       <button data-v="1" aria-label="1">★</button><button data-v="2" aria-label="2">★</button><button data-v="3" aria-label="3">★</button><button data-v="4" aria-label="4">★</button><button data-v="5" aria-label="5">★</button>
@@ -257,7 +255,6 @@
       if (saved?.features?.length) {
         draw.addFeatures(saved.features);
         if (saved.stats) Object.assign(stats, saved.stats);
-        document.getElementById('name').value = saved.name || '';
       }
     } catch (e) { /* 下書きがなくても動く */ }
     setMode('point');
@@ -391,11 +388,10 @@
   function saveDraft() {
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify({
-        features: userFeatures(), stats, name: document.getElementById('name').value,
+        features: userFeatures(), stats,
       }));
     } catch (e) { /* 保存できなくても動く */ }
   }
-  document.getElementById('name').addEventListener('input', saveDraft);
 
   // ---- 使いやすさ ----
   let rating = null;
@@ -413,7 +409,6 @@
       type: 'FeatureCollection',
       metadata: {
         app: 'gyoda-draw', version: 1, submissionId: id, submittedAt: new Date().toISOString(),
-        name: document.getElementById('name').value.trim() || null,
         rating, feedback: document.getElementById('feedback').value.trim() || null,
         secondsSpent: stats.startedAt ? Math.round((Date.now() - stats.startedAt) / 1000) : null,
         drawCount: stats.drawCount, editCount: stats.editCount, deleteCount: stats.deleteCount,
