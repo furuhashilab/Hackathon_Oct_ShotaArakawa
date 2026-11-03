@@ -46,6 +46,13 @@ function doPost(e) {
       return json_({ ok: false, error: 'invalid' });
     }
     const m = data.metadata || {};
+    // 新規投稿だけを検査する。過去の投稿の同意状態は変更しない。
+    const consent = m.consent || {};
+    if (consent.accepted !== true || consent.version !== '2026-11-04' ||
+        consent.license !== 'PDL-1.0' || consent.scope !== 'features' ||
+        typeof consent.acceptedAt !== 'string' || !isFinite(Date.parse(consent.acceptedAt))) {
+      return json_({ ok: false, error: 'consent_required' });
+    }
     const lock = LockService.getScriptLock();
     lock.waitLock(10000);
     try {

@@ -77,6 +77,9 @@
   .stars button.on { color: #f59f00; }
   .stars-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); max-width: 190px; }
   #sendMsg { font-size: 14px; line-height: 1.6; }
+  .consent-info { font-size: 13px; line-height: 1.7; margin: 14px 0 8px; }
+  .consent-label { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; line-height: 1.6; }
+  .consent-label input { flex: 0 0 auto; width: 20px; height: 20px; margin: 2px 0 0; }
   .ok { color: #2b8a3e; } .ng { color: #e03131; }
   footer { font-size: 12px; color: var(--muted); line-height: 1.6; margin-top: auto; }
   footer a { color: inherit; }
@@ -132,6 +135,8 @@
 
   <section>
     <h2><span class="step">3</span>送る</h2>
+    <label class="f" for="name">お名前・ニックネーム（任意・管理者確認用）</label>
+    <input type="text" id="name" maxlength="40" autocomplete="nickname">
     <label class="f">使いやすさはどうでしたか？</label>
     <div class="stars" id="stars" role="radiogroup" aria-label="使いやすさ">
       <button data-v="1" aria-label="1">★</button><button data-v="2" aria-label="2">★</button><button data-v="3" aria-label="3">★</button><button data-v="4" aria-label="4">★</button><button data-v="5" aria-label="5">★</button>
@@ -139,6 +144,13 @@
     <div class="stars-label"><span>むずかしい</span><span>かんたん</span></div>
     <label class="f" for="feedback">困ったこと・感想（なくてもOK）</label>
     <textarea id="feedback" maxlength="1000"></textarea>
+    <div class="consent-info" id="consentInfo">
+      <p>投稿する場所・ルート・エリアとその説明は、管理者が確認し、行田観光マップの改善やOpenStreetMap（OSM）の更新に活用します。これらの地図情報は、公共データ利用規約（PDL1.0）に基づくオープンデータとして公開・提供します。第三者も、出典表示などの条件を守って、商用利用を含む利用・加工・再配布ができます。</p>
+      <p>ご自身が現地で確認した情報など、提供する権限のある内容を投稿してください。他の地図やウェブサイトの情報を、利用条件を確認せずにコピーしないでください。</p>
+      <p>名前・個人情報・写真・使いやすさ評価・操作の感想はPDL1.0の対象外です。名前は上の専用欄だけに記入し、地図のタイトルや説明には個人情報を書かないでください。投稿内容がすべて掲載・OSMに反映されるわけではありません。</p>
+      <p><a href="submission-terms.html" target="_blank" rel="noopener">投稿情報の利用について</a> ／ <a href="https://www.digital.go.jp/resources/open_data/public_data_license_v1.0" target="_blank" rel="noopener">PDL1.0原文</a><br>同意文の版：2026-11-04</p>
+    </div>
+    <label class="consent-label" for="licenseConsent"><input id="licenseConsent" type="checkbox" required aria-describedby="consentInfo"><span>上記の利用条件を確認し、自分が提供する権限を持つ地図情報・説明を、PDL1.0に基づいて公開・再利用することに同意します。（必須）</span></label>
     <div class="row"><button class="main" id="sendBtn" disabled>この内容で送る</button></div>
     <p id="sendMsg" aria-live="polite"></p>
   </section>
@@ -255,6 +267,7 @@
       if (saved?.features?.length) {
         draw.addFeatures(saved.features);
         if (saved.stats) Object.assign(stats, saved.stats);
+        document.getElementById('name').value = saved.name || '';
       }
     } catch (e) { /* 下書きがなくても動く */ }
     setMode('point');
@@ -356,7 +369,7 @@
   function render() {
     const feats = userFeatures();
     document.getElementById('count').textContent = feats.length ? `（${feats.length}）` : '';
-    document.getElementById('sendBtn').disabled = feats.length === 0;
+    updateSendState();
     if (!feats.length) { list.innerHTML = '<li class="empty" style="border:none;padding:0">まだありません。上の道具で地図に描いてみましょう。</li>'; return; }
     list.innerHTML = feats.map(f => {
       const p = f.properties, c = catOf(p.category);
@@ -388,10 +401,11 @@
   function saveDraft() {
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify({
-        features: userFeatures(), stats,
+        features: userFeatures(), stats, name: document.getElementById('name').value,
       }));
     } catch (e) { /* 保存できなくても動く */ }
   }
+  document.getElementById('name').addEventListener('input', saveDraft);
 
   // ---- 使いやすさ ----
   let rating = null;
@@ -409,6 +423,12 @@
       type: 'FeatureCollection',
       metadata: {
         app: 'gyoda-draw', version: 1, submissionId: id, submittedAt: new Date().toISOString(),
+        name: document.getElementById('name').value.trim() || null,
+        consent: {
+          accepted: true, version: '2026-11-04', acceptedAt: new Date().toISOString(),
+          license: 'PDL-1.0', scope: 'features',
+          licenseUrl: 'https://www.digital.go.jp/resources/open_data/public_data_license_v1.0',
+        },
         rating, feedback: document.getElementById('feedback').value.trim() || null,
         secondsSpent: stats.startedAt ? Math.round((Date.now() - stats.startedAt) / 1000) : null,
         drawCount: stats.drawCount, editCount: stats.editCount, deleteCount: stats.deleteCount,
@@ -428,10 +448,20 @@
   }
   const sendBtn = document.getElementById('sendBtn');
   const sendMsg = document.getElementById('sendMsg');
+  let sending = false;
+  const licenseConsent = document.getElementById('licenseConsent');
+  function updateSendState() {
+    sendBtn.disabled = sending || !userFeatures().length || !licenseConsent.checked;
+  }
+  licenseConsent.addEventListener('change', updateSendState);
+  window.addEventListener('pageshow', () => { licenseConsent.checked = false; updateSendState(); });
   sendBtn.addEventListener('click', async () => {
+    if (sending || !licenseConsent.checked) return;
     const sub = buildSubmission();
     if (!sub.features.length) return;
+    sending = true;
     sendBtn.disabled = true;
+    try {
     if (CFG.SUBMIT_URL) {
       sendMsg.className = ''; sendMsg.textContent = '送っています…';
       try {
@@ -445,7 +475,6 @@
       } catch (e) {
         sendMsg.className = 'ng';
         sendMsg.textContent = 'うまく送れませんでした。電波の良いところでもう一度お試しください。';
-        sendBtn.disabled = false;
       }
     } else {
       const blob = new Blob([JSON.stringify(sub, null, 2)], { type: 'application/geo+json' });
@@ -457,10 +486,14 @@
       URL.revokeObjectURL(a.href);
       sendMsg.className = 'ok';
       sendMsg.textContent = 'ファイルを保存しました。このファイルを地図の管理者に送ってください。';
-      sendBtn.disabled = false;
+    }
+    } finally {
+      sending = false;
+      updateSendState();
     }
   });
   function clearAll() {
+    licenseConsent.checked = false;
     draw.clear();
     selectedId = null;
     Object.assign(stats, { startedAt: null, drawCount: 0, deleteCount: 0, editCount: 0 });
