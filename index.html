@@ -67,7 +67,7 @@
   .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
 
   label.f { display: block; font-size: 13px; color: var(--muted); margin: 8px 0 4px; }
-  input[type=text], textarea {
+  input[type=text], textarea, select {
     width: 100%; font: inherit; font-size: 16px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
     background: var(--bg); color: var(--text);
   }
@@ -86,6 +86,15 @@
 
   dialog { border: none; border-radius: 14px; padding: 20px; width: min(420px, calc(100vw - 32px)); background: var(--bg); color: var(--text); box-shadow: 0 10px 40px rgba(0,0,0,.25); }
   dialog::backdrop { background: rgba(0,0,0,.35); }
+  dialog { max-height: calc(100dvh - 32px); overflow-y: auto; border-radius: 8px; }
+  #reviewDialog { width: min(600px, calc(100vw - 24px)); }
+  #reviewDialog fieldset { border: 0; border-top: 1px solid var(--line); margin: 16px 0; padding: 12px 0 0; min-width: 0; }
+  #reviewDialog legend { font-size: 15px; font-weight: 600; }
+  .answer-choice { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; font-size: 14px; line-height: 1.5; }
+  .answer-choice input { flex: 0 0 auto; margin-top: 4px; }
+  .research-note { font-size: 13px; line-height: 1.6; color: var(--muted); }
+  #reviewItems { padding-left: 22px; overflow-wrap: anywhere; }
+  .dlg-actions { flex-wrap: wrap; }
   dialog h3 { margin: 0 0 4px; font-size: 18px; }
   .chips { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .chip { border: 2px solid var(--line); border-radius: 10px; padding: 8px; background: var(--bg); color: var(--text); font: inherit; cursor: pointer; text-align: left; }
@@ -135,6 +144,30 @@
 
   <section>
     <h2><span class="step">3</span>送る</h2>
+    <button class="main" id="reviewBtn" disabled>投稿内容を確認</button>
+    <p id="resultMsg" role="status"></p>
+  </section>
+  <footer>
+    地図: &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors ／ 描画: Terra Draw + MapLibre GL JS<br>
+    名前は専用欄だけに記入し、地図の説明には個人情報を書かないでください。
+  </footer>
+</aside>
+<div id="map"></div>
+
+<dialog id="reviewDialog" aria-labelledby="reviewTitle">
+  <h3 id="reviewTitle" tabindex="-1">投稿内容の確認</h3>
+  <ul id="reviewItems"></ul>
+  <p class="research-note">行田市との関わり・訪問頻度・年代・知ったきっかけは研究の分析に使います。PDL1.0の公開対象外で、回答者ごとの属性を観光マップ上に公開することはありません。</p>
+  <fieldset><legend>行田市との関わりを教えてください。（必須）</legend>
+    <p class="research-note">複数選べます。「行ったことがない」「回答しない」は、それだけを選んでください。</p>
+    <div id="relationshipChoices"></div>
+  </fieldset>
+  <fieldset><legend>この1年間、どのくらい行田市に行きましたか？（必須）</legend>
+    <p class="research-note">今住んでいる方は「今、住んでいる」、初めて訪れた方は「今回が初めて」を選んでください。</p>
+    <div id="frequencyChoices"></div>
+  </fieldset>
+  <label class="f" for="ageGroup">年代を教えてください。（任意）</label>
+  <select id="ageGroup"></select>
     <label class="f" for="name">お名前・ニックネーム（任意・管理者確認用）</label>
     <input type="text" id="name" maxlength="40" autocomplete="nickname">
     <label class="f">使いやすさはどうでしたか？</label>
@@ -147,20 +180,14 @@
     <div class="consent-info" id="consentInfo">
       <p>投稿する場所・ルート・エリアとその説明は、管理者が確認し、行田観光マップの改善やOpenStreetMap（OSM）の更新に活用します。これらの地図情報は、公共データ利用規約（PDL1.0）に基づくオープンデータとして公開・提供します。第三者も、出典表示などの条件を守って、商用利用を含む利用・加工・再配布ができます。</p>
       <p>ご自身が現地で確認した情報など、提供する権限のある内容を投稿してください。他の地図やウェブサイトの情報を、利用条件を確認せずにコピーしないでください。</p>
-      <p>名前・個人情報・写真・使いやすさ評価・操作の感想はPDL1.0の対象外です。名前は上の専用欄だけに記入し、地図のタイトルや説明には個人情報を書かないでください。投稿内容がすべて掲載・OSMに反映されるわけではありません。</p>
+      <p>名前・個人情報・写真・使いやすさ評価・操作の感想・回答者属性・知ったきっかけはPDL1.0の対象外です。名前は上の専用欄だけに記入し、地図のタイトルや説明には個人情報を書かないでください。投稿内容がすべて掲載・OSMに反映されるわけではありません。</p>
       <p><a href="submission-terms.html" target="_blank" rel="noopener">投稿情報の利用について</a> ／ <a href="https://www.digital.go.jp/resources/open_data/public_data_license_v1.0" target="_blank" rel="noopener">PDL1.0原文</a><br>同意文の版：2026-11-04</p>
     </div>
     <label class="consent-label" for="licenseConsent"><input id="licenseConsent" type="checkbox" required aria-describedby="consentInfo"><span>上記の利用条件を確認し、自分が提供する権限を持つ地図情報・説明を、PDL1.0に基づいて公開・再利用することに同意します。（必須）</span></label>
-    <div class="row"><button class="main" id="sendBtn" disabled>この内容で送る</button></div>
+    <p id="reviewError" class="ng" role="alert"></p>
+    <div class="dlg-actions"><button class="sub" id="reviewBack">地図に戻る</button><button class="main" id="sendBtn" disabled>この内容で送る</button></div>
     <p id="sendMsg" aria-live="polite"></p>
-  </section>
-
-  <footer>
-    地図: &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors ／ 描画: <a href="https://github.com/JamesLMilner/terra-draw" target="_blank" rel="noopener">Terra Draw</a> + <a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL JS</a><br>
-    送られた内容は地図づくりの参考にします。個人を特定できる情報は書かないでください。
-  </footer>
-</aside>
-<div id="map"></div>
+</dialog>
 
 <dialog id="dlg">
   <form method="dialog" id="dlgForm">
@@ -171,8 +198,11 @@
     <input type="text" id="fTitle" maxlength="60" placeholder="例：忍城の桜がきれい">
     <label class="f" for="fComment">コメント（なくてもOK）</label>
     <textarea id="fComment" maxlength="500" placeholder="例：春は人が多いので朝がおすすめ"></textarea>
+    <label class="f" for="fDiscovery">この場所を最初に知ったきっかけは？（必須）</label>
+    <select id="fDiscovery" required></select>
+    <p class="research-note">ルートやエリアについても選べます。研究用の回答で、PDL1.0の公開対象外です。</p>
     <div class="dlg-actions">
-      <button class="sub" value="skip">あとで</button>
+      <button class="sub" value="skip" formnovalidate>あとで</button>
       <button class="main" value="save" id="dlgSave">決定</button>
     </div>
   </form>
@@ -186,6 +216,24 @@
 (() => {
   const CFG = window.GYODA_CONFIG;
   const DRAFT_KEY = 'gyoda-draw:draft:v1';
+  const researchOptions = {
+    relationship: ['今、住んでいる', '以前、住んでいた', '今、通勤・通学している', '以前、通勤・通学していた', '観光や遊びで行ったことがある', '買い物・仕事・知人への訪問などで行ったことがある', '行ったことがない', 'その他', '回答しない'],
+    frequency: ['今、住んでいる', '今回が初めて', '週に1回以上', '月に1〜3回くらい', '年に2〜11回くらい', '年に1回', 'この1年間は行っていない', '覚えていない・回答しない'],
+    age: ['10代以下', '20代', '30代', '40代', '50代', '60代', '70代以上', '回答しない'],
+    discovery: ['暮らし・通勤・通学の中で', '偶然通りかかって', '家族・友人・知人から', 'SNS・動画で', '観光協会・市などのサイトやパンフレットで', '地図アプリ・その他のサイトで', 'テレビ・新聞・雑誌などで', 'この観光マップで', '自分で考えたルート・エリア', 'その他', '覚えていない・回答しない'],
+  };
+  for (const [id, choices] of [['ageGroup', researchOptions.age], ['fDiscovery', researchOptions.discovery]]) {
+    const select = document.getElementById(id);
+    select.add(new Option(id === 'fDiscovery' ? '選んでください' : '選択しない', ''));
+    choices.forEach(label => select.add(new Option(label, label)));
+  }
+  for (const [id, name, type, choices] of [['relationshipChoices', 'relationship', 'checkbox', researchOptions.relationship], ['frequencyChoices', 'frequency', 'radio', researchOptions.frequency]]) {
+    choices.forEach(value => {
+      const label = document.createElement('label'); label.className = 'answer-choice';
+      const input = document.createElement('input'); input.type = type; input.name = name; input.value = value;
+      label.append(input, document.createTextNode(value)); document.getElementById(id).append(label);
+    });
+  }
   const KIND = { point: '場所', linestring: 'ルート', polygon: 'エリア' };
   const KIND_ICON = { point: '📍', linestring: '〰️', polygon: '⬠' };
   const HINTS = {
@@ -347,6 +395,7 @@
       `${KIND_ICON[f.properties.mode]} この${KIND[f.properties.mode]}について${isNew ? '教えてください' : '直す'}`;
     document.getElementById('fTitle').value = f.properties.title || '';
     document.getElementById('fComment').value = f.properties.comment || '';
+    document.getElementById('fDiscovery').value = f.properties.discovery || '';
     dlg.showModal();
     setTimeout(() => document.getElementById('fTitle').focus(), 50);
   }
@@ -357,6 +406,7 @@
           category: dlgCategory || undefined,
           title: document.getElementById('fTitle').value.trim() || undefined,
           comment: document.getElementById('fComment').value.trim() || undefined,
+          discovery: document.getElementById('fDiscovery').value || undefined,
         });
       } catch (e) { console.error('updateFeatureProperties failed', e); }
     }
@@ -424,6 +474,12 @@
       metadata: {
         app: 'gyoda-draw', version: 1, submissionId: id, submittedAt: new Date().toISOString(),
         name: document.getElementById('name').value.trim() || null,
+        // 研究用の回答は公開対象の features から分離する。
+        research: {
+          version: '2026-11-06', source: 'drawing-map',
+          respondent: readRespondent(),
+          discoveries: userFeatures().map((f, index) => ({ featureId: String(f.id), featureIndex: index, answer: f.properties.discovery || null })),
+        },
         consent: {
           accepted: true, version: '2026-11-04', acceptedAt: new Date().toISOString(),
           license: 'PDL-1.0', scope: 'features',
@@ -436,6 +492,7 @@
       },
       features: userFeatures().map(f => ({
         type: 'Feature',
+        id: String(f.id),
         geometry: f.geometry,
         properties: {
           kind: f.properties.mode,
@@ -450,17 +507,61 @@
   const sendMsg = document.getElementById('sendMsg');
   let sending = false;
   const licenseConsent = document.getElementById('licenseConsent');
+  const reviewDialog = document.getElementById('reviewDialog');
+  const reviewBtn = document.getElementById('reviewBtn');
+  function missingDiscovery() {
+    return userFeatures().find(f => !researchOptions.discovery.includes(f.properties.discovery));
+  }
+  function readRespondent() {
+    return {
+      relationship: [...document.querySelectorAll('input[name="relationship"]:checked')].map(el => el.value),
+      frequency: document.querySelector('input[name="frequency"]:checked')?.value || null,
+      ageGroup: document.getElementById('ageGroup').value || null,
+    };
+  }
+  function respondentError() {
+    const r = readRespondent();
+    if (!r.relationship.length) return '行田市との関わりを選んでください。';
+    if (r.relationship.length > 1 && r.relationship.some(v => ['行ったことがない', '回答しない'].includes(v))) return '「行ったことがない」「回答しない」は、それだけを選んでください。';
+    if (!r.frequency) return '訪問頻度を選んでください。';
+    if (r.relationship.includes('今、住んでいる') && r.frequency !== '今、住んでいる') return '今住んでいる方は、訪問頻度でも「今、住んでいる」を選んでください。';
+    if (r.relationship.includes('行ったことがない') && !['この1年間は行っていない', '覚えていない・回答しない'].includes(r.frequency)) return '未訪問の場合は、訪問頻度を確認してください。';
+    return '';
+  }
+  reviewBtn.addEventListener('click', () => {
+    if (sending || !userFeatures().length) return;
+    const missing = missingDiscovery();
+    if (missing) {
+      document.getElementById('resultMsg').textContent = `「${missing.properties.title || 'タイトルなし'}」の知ったきっかけを選んでください。`;
+      openDialog(missing.id, false);
+      return;
+    }
+    document.getElementById('resultMsg').textContent = '';
+    const items = document.getElementById('reviewItems'); items.replaceChildren();
+    userFeatures().forEach(f => { const li = document.createElement('li'); li.textContent = `${KIND[f.properties.mode]}：${f.properties.title || 'タイトルなし'}${f.properties.comment ? ' / ' + f.properties.comment : ''}`; items.append(li); });
+    licenseConsent.checked = false;
+    document.getElementById('reviewError').textContent = ''; sendMsg.textContent = '';
+    updateSendState(); reviewDialog.showModal(); document.getElementById('reviewTitle').focus();
+  });
+  document.getElementById('reviewBack').addEventListener('click', () => { if (!sending) reviewDialog.close(); });
+  reviewDialog.addEventListener('cancel', e => { if (sending) e.preventDefault(); });
   function updateSendState() {
+    reviewBtn.disabled = sending || !userFeatures().length;
+    document.getElementById('reviewBack').disabled = sending;
     sendBtn.disabled = sending || !userFeatures().length || !licenseConsent.checked;
   }
   licenseConsent.addEventListener('change', updateSendState);
   window.addEventListener('pageshow', () => { licenseConsent.checked = false; updateSendState(); });
   sendBtn.addEventListener('click', async () => {
     if (sending || !licenseConsent.checked) return;
+    const missing = missingDiscovery();
+    const error = missing ? `「${missing.properties.title || 'タイトルなし'}」の知ったきっかけが未回答です。地図に戻って入力してください。` : respondentError();
+    document.getElementById('reviewError').textContent = error;
+    if (error) { document.getElementById('reviewError').scrollIntoView({ block: 'center' }); return; }
     const sub = buildSubmission();
     if (!sub.features.length) return;
     sending = true;
-    sendBtn.disabled = true;
+    updateSendState();
     try {
     if (CFG.SUBMIT_URL) {
       sendMsg.className = ''; sendMsg.textContent = '送っています…';
@@ -471,7 +572,9 @@
         if (!out.ok) throw new Error(out.error || 'error');
         sendMsg.className = 'ok';
         sendMsg.textContent = `送りました！ありがとうございます（${sub.features.length}件）。`;
+        document.getElementById('resultMsg').textContent = sendMsg.textContent;
         clearAll();
+        reviewDialog.close();
       } catch (e) {
         sendMsg.className = 'ng';
         sendMsg.textContent = 'うまく送れませんでした。電波の良いところでもう一度お試しください。';
@@ -494,6 +597,8 @@
   });
   function clearAll() {
     licenseConsent.checked = false;
+    document.querySelectorAll('input[name="relationship"], input[name="frequency"]').forEach(el => { el.checked = false; });
+    document.getElementById('ageGroup').value = '';
     draw.clear();
     selectedId = null;
     Object.assign(stats, { startedAt: null, drawCount: 0, deleteCount: 0, editCount: 0 });
